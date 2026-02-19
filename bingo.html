@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>繽紛連線 Bingo - 行動優化版</title>
+    <title>繽紛連線 Bingo - 二次確認版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
@@ -12,11 +12,12 @@
             background-color: #fffafb; 
             font-family: 'Helvetica Neue', Arial, sans-serif; 
             touch-action: manipulation;
+            user-select: none;
         }
         .cute-font { font-family: 'ZCOOL KuaiLe', cursive, sans-serif; }
         
         /* 棋盤與格子 */
-        .bingo-container { position: relative; width: 100%; max-width: 400px; margin: 0 auto; }
+        .bingo-container { position: relative; width: 100%; max-width: 380px; margin: 0 auto; }
         .bingo-cell {
             aspect-ratio: 1 / 1;
             transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -40,7 +41,7 @@
         }
         .bingo-line {
             stroke: #ff4d6d;
-            stroke-width: 12;
+            stroke-width: 14;
             stroke-linecap: round;
             stroke-dasharray: 1000;
             stroke-dashoffset: 1000;
@@ -50,7 +51,7 @@
         }
         @keyframes drawLine { to { stroke-dashoffset: 0; } }
 
-        /* 按鈕與輸入框 */
+        /* 按鈕樣式 */
         .btn-main {
             background: linear-gradient(135deg, #ff8fa3 0%, #ff4d6d 100%);
             box-shadow: 0 4px 0 #c9184a;
@@ -63,30 +64,33 @@
         }
         .btn-sub:active { transform: translateY(2px); box-shadow: 0 2px 0 #4895ef; }
 
+        .btn-danger {
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+            box-shadow: 0 4px 0 #b91c1c;
+        }
+
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        
-        /* 避免手機上輸入時縮放 */
         input[type="number"] { font-size: 16px; }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-2 sm:p-4">
+<body class="min-h-screen flex items-center justify-center p-2">
 
-    <div id="app" class="w-full max-w-sm sm:max-w-md mx-auto">
+    <div id="app" class="w-full max-w-sm mx-auto">
         <header class="text-center mb-4">
-            <h1 class="text-4xl sm:text-5xl font-bold text-pink-500 cute-font drop-shadow-md">Bingo!</h1>
-            <p id="status-text" class="text-pink-400 mt-1 text-sm font-medium">✨ 設定範圍並點擊隨機填數 ✨</p>
+            <h1 class="text-4xl font-bold text-pink-500 cute-font drop-shadow-md">Bingo!</h1>
+            <p id="status-text" class="text-pink-400 mt-1 text-sm font-medium">✨ 準備好開始好運的一天了嗎？ ✨</p>
         </header>
 
         <!-- 設定範圍區塊 -->
         <div id="range-setup" class="bg-white p-3 rounded-2xl border-4 border-pink-100 shadow-sm mb-3">
-            <div class="grid grid-cols-7 items-center gap-2">
-                <div class="col-span-3">
-                    <label class="block text-[10px] text-pink-400 font-bold mb-1 ml-1 uppercase">Min</label>
+            <div class="flex items-center gap-2">
+                <div class="flex-1">
+                    <label class="block text-[10px] text-pink-400 font-bold mb-1 ml-1">最小值 (MIN)</label>
                     <input type="number" id="min-input" value="1" class="w-full bg-pink-50 text-pink-600 font-bold p-2 rounded-xl border-2 border-transparent focus:border-pink-300 outline-none text-center">
                 </div>
-                <div class="col-span-1 text-center text-pink-300 font-bold mt-4">~</div>
-                <div class="col-span-3">
-                    <label class="block text-[10px] text-pink-400 font-bold mb-1 ml-1 uppercase">Max</label>
+                <div class="text-pink-300 font-bold mt-4">~</div>
+                <div class="flex-1">
+                    <label class="block text-[10px] text-pink-400 font-bold mb-1 ml-1">最大值 (MAX)</label>
                     <input type="number" id="max-input" value="25" class="w-full bg-pink-50 text-pink-600 font-bold p-2 rounded-xl border-2 border-transparent focus:border-pink-300 outline-none text-center">
                 </div>
             </div>
@@ -106,7 +110,7 @@
 
         <!-- 棋盤主體 -->
         <div class="bingo-container bg-white rounded-[2rem] border-[8px] border-pink-100 shadow-xl overflow-hidden mb-4">
-            <div id="grid" class="grid grid-cols-5 gap-1 p-1 sm:p-2">
+            <div id="grid" class="grid grid-cols-5 gap-1 p-1">
                 <!-- 由 JS 生成 -->
             </div>
             <svg id="line-svg" viewBox="0 0 500 500"></svg>
@@ -114,11 +118,22 @@
 
         <!-- 控制區 -->
         <div class="space-y-3 px-2">
+            <!-- 初始控制 -->
             <div id="setup-btns" class="flex flex-col gap-2">
                 <button id="random-btn" class="btn-sub text-white font-black py-3 rounded-xl text-lg">🎲 隨機填數</button>
                 <button id="start-btn" class="btn-main text-white font-black py-3 rounded-xl text-lg opacity-50 cursor-not-allowed" disabled>💖 確認開始</button>
             </div>
-            <button id="reset-btn" class="hidden w-full bg-white border-4 border-pink-100 text-pink-400 font-black py-3 rounded-xl hover:bg-pink-50 transition-all">🔄 重新設定</button>
+
+            <!-- 遊戲中控制 (含二次確認) -->
+            <div id="active-btns" class="hidden">
+                <button id="reset-init-btn" class="w-full bg-white border-4 border-pink-100 text-pink-400 font-black py-3 rounded-xl hover:bg-pink-50 transition-all">🔄 重新開始</button>
+                
+                <!-- 二次確認按鈕組 -->
+                <div id="reset-confirm-panel" class="hidden flex gap-2">
+                    <button id="reset-cancel-btn" class="flex-1 bg-slate-100 text-slate-500 font-black py-3 rounded-xl">取消</button>
+                    <button id="reset-final-btn" class="btn-danger flex-[2] text-white font-black py-3 rounded-xl">確定重來！</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -144,7 +159,8 @@
             winLine: () => playTone(880, 'triangle', 0.3, 0.1),
             victory: () => {
                 [523, 659, 783, 1046].forEach((f, i) => setTimeout(() => playTone(f, 'square', 0.4, 0.05), i * 150));
-            }
+            },
+            warn: () => playTone(200, 'sawtooth', 0.3, 0.1)
         };
 
         // --- 變數 ---
@@ -166,7 +182,7 @@
             gridEl.innerHTML = '';
             for (let i = 0; i < 25; i++) {
                 const cell = document.createElement('div');
-                cell.className = 'bingo-cell bg-pink-50 rounded-lg sm:rounded-xl flex items-center justify-center text-lg sm:text-2xl font-black text-pink-200 cursor-pointer';
+                cell.className = 'bingo-cell bg-pink-50 rounded-lg flex items-center justify-center text-xl font-black text-pink-200 cursor-pointer';
                 cell.textContent = gridData[i] || '?';
                 cell.onclick = () => handleCellClick(i);
                 gridEl.appendChild(cell);
@@ -179,20 +195,20 @@
 
             if (isNaN(min) || isNaN(max) || (max - min + 1) < 25) {
                 errorMsg.classList.remove('hidden');
+                SFX.warn();
                 return;
             }
             errorMsg.classList.add('hidden');
             SFX.click();
 
-            const pool = [];
-            for (let i = min; i <= max; i++) pool.push(i);
+            const pool = Array.from({length: max - min + 1}, (_, i) => min + i);
             const selected = pool.sort(() => Math.random() - 0.5).slice(0, 25);
             gridData = selected;
             
             renderCells();
             document.getElementById('start-btn').disabled = false;
             document.getElementById('start-btn').classList.remove('opacity-50', 'cursor-not-allowed');
-            statusEl.textContent = "已填入數字，準備好就開始！";
+            statusEl.textContent = "數字填好了，準備好就開始！";
         }
 
         function renderCells() {
@@ -284,27 +300,53 @@
 
         function triggerVictory() {
             SFX.victory();
-            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
         }
 
+        // --- 核心按鈕事件 ---
         document.getElementById('random-btn').onclick = randomize;
+
         document.getElementById('start-btn').onclick = () => {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             isStarted = true;
             document.getElementById('setup-btns').classList.add('hidden');
             document.getElementById('range-setup').classList.add('hidden');
-            document.getElementById('reset-btn').classList.remove('hidden');
+            document.getElementById('active-btns').classList.remove('hidden');
             document.getElementById('info-bar').classList.remove('hidden');
             statusEl.textContent = "點擊數字來標記連線！";
             SFX.victory();
         };
+
         document.getElementById('undo-btn').onclick = () => {
             if (history.length === 0) return;
             marked.delete(history.pop());
             SFX.undo();
             updateGame();
         };
-        document.getElementById('reset-btn').onclick = () => location.reload();
+
+        // --- 二次確認重置邏輯 ---
+        const resetInitBtn = document.getElementById('reset-init-btn');
+        const resetConfirmPanel = document.getElementById('reset-confirm-panel');
+        const resetCancelBtn = document.getElementById('reset-cancel-btn');
+        const resetFinalBtn = document.getElementById('reset-final-btn');
+
+        resetInitBtn.onclick = () => {
+            SFX.warn();
+            resetInitBtn.classList.add('hidden');
+            resetConfirmPanel.classList.remove('hidden');
+            statusEl.textContent = "⚠️ 確定要放棄目前進度重來嗎？";
+        };
+
+        resetCancelBtn.onclick = () => {
+            SFX.click();
+            resetInitBtn.classList.remove('hidden');
+            resetConfirmPanel.classList.add('hidden');
+            statusEl.textContent = "點擊數字來標記連線！";
+        };
+
+        resetFinalBtn.onclick = () => {
+            location.reload();
+        };
 
         createGrid();
     </script>
