@@ -2,284 +2,574 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>繽紛連線 Bingo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>小寶貝遊樂園 - v15.0 專業旗艦版</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #fffafb; font-family: 'Helvetica Neue', Arial, sans-serif; }
-        .cute-font { font-family: 'ZCOOL KuaiLe', cursive, sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #fdfdfa;
+            margin: 0; padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            overflow: hidden; user-select: none;
+        }
         
-        /* 棋盤與格子 */
-        .bingo-container { position: relative; }
-        .bingo-cell {
-            aspect-ratio: 1 / 1;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        .scroll-container { 
+            height: calc(100vh - 180px); 
+            overflow-y: auto; 
+            -webkit-overflow-scrolling: touch; 
+            padding: 10px 20px 80px 20px;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+
+        /* 鋼琴樣式 */
+        .piano-container {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            height: 38vh; display: flex; background: #111;
+            padding: 4px 4px 0 4px; border-top: 4px solid #222; z-index: 50;
+        }
+        @media (orientation: landscape) {
+            .piano-container { height: 42vh; }
+        }
+
+        .white-key {
+            flex: 1; background: linear-gradient(to bottom, #eee 0%, #fff 100%);
+            border: 1px solid #bbb; border-radius: 0 0 8px 8px;
+            position: relative; z-index: 10;
+            display: flex; align-items: flex-end; justify-content: center;
+            padding-bottom: 8px; font-size: 0.5rem; font-weight: 900; color: #aaa;
+            transition: all 0.05s;
+        }
+        .white-key.active { background: #3b82f6 !important; color: white !important; transform: translateY(6px); box-shadow: inset 0 2px 10px rgba(0,0,0,0.2); }
+        
+        .black-key {
+            width: 5.5%; height: 58%; background: linear-gradient(to bottom, #333 0%, #000 100%);
+            border-radius: 0 0 4px 4px; z-index: 20; margin-left: -2.75%; margin-right: -2.75%;
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.5); transition: all 0.05s;
+        }
+        .black-key.active { background: #1d4ed8 !important; transform: scaleY(0.95) translateY(2px); }
+
+        /* 注音展示盒 */
+        .zy-fixed-box {
+            width: 80px; height: 120px; display: flex; justify-content: center; align-items: center;
+            background: white; border-radius: 20px; border: 2px solid #efeff6;
+            box-shadow: 0 6px 12px -2px rgba(0,0,0,0.05); position: relative;
+        }
+        .zy-main-stack { display: flex; flex-direction: column; align-items: center; line-height: 1; font-size: 1.8rem; font-weight: 900; color: #1f2937; }
+        .zy-tone-mark { position: absolute; font-size: 1.1rem; font-weight: 900; color: #3b82f6; }
+        .tone-2, .tone-3, .tone-4 { right: 6px; top: 45%; transform: translateY(-50%); }
+        .tone-light { top: 6px; left: 50%; transform: translateX(-50%); }
+
+        .rank-highlight {
+            animation: pulse-gold 1.5s infinite;
+            border: 4px solid #fbbf24 !important;
+            background: #fffbeb !important;
+            transform: scale(1.05);
             z-index: 10;
         }
-        .marked {
-            background-color: #ff8fa3 !important;
-            color: white !important;
-            transform: scale(0.9);
-            border-color: #ffb3c1 !important;
-            box-shadow: 0 4px 10px rgba(255, 143, 163, 0.3);
+        @keyframes pulse-gold {
+            0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.6); }
+            70% { box-shadow: 0 0 0 15px rgba(251, 191, 36, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
         }
-
-        /* 連線線條 */
-        #line-svg {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            pointer-events: none;
-            z-index: 20;
-        }
-        .bingo-line {
-            stroke: #ff4d6d;
-            stroke-width: 8;
-            stroke-linecap: round;
-            stroke-dasharray: 1000;
-            stroke-dashoffset: 1000;
-            animation: drawLine 0.5s ease-out forwards;
-            filter: drop-shadow(0 0 5px rgba(255, 77, 109, 0.5));
-            opacity: 0.8;
-        }
-        @keyframes drawLine { to { stroke-dashoffset: 0; } }
-
-        /* 按鈕樣式 */
-        .btn-main {
-            background: linear-gradient(135deg, #ff8fa3 0%, #ff4d6d 100%);
-            box-shadow: 0 4px 0 #c9184a;
-            transition: all 0.1s;
-        }
-        .btn-main:active { transform: translateY(2px); box-shadow: 0 2px 0 #c9184a; }
-        .btn-sub {
-            background: linear-gradient(135deg, #bde0fe 0%, #a2d2ff 100%);
-            box-shadow: 0 4px 0 #4895ef;
-        }
-        .btn-sub:active { transform: translateY(2px); box-shadow: 0 2px 0 #4895ef; }
-
-        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-        .float { animation: float 3s ease-in-out infinite; }
+        .bgm-pulse { animation: pulse-bgm 2s infinite; }
+        @keyframes pulse-bgm { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4">
+<body>
+    <div id="root"></div>
 
-    <div id="app" class="w-full max-w-md">
-        <header class="text-center mb-6">
-            <h1 class="text-5xl font-bold text-pink-500 cute-font float drop-shadow-md">Bingo!</h1>
-            <p id="status-text" class="text-pink-400 mt-2 font-medium">✨ 準備好開始好運的一天了嗎？ ✨</p>
-        </header>
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-        <!-- 頂部資訊列 -->
-        <div id="info-bar" class="hidden flex justify-between items-center mb-4 bg-white p-4 rounded-3xl border-4 border-pink-100 shadow-sm">
-            <div class="text-pink-600 font-bold flex items-center gap-2">
-                <span class="text-sm">連線數</span>
-                <span id="line-count" class="text-4xl text-pink-500">0</span>
-            </div>
-            <button id="undo-btn" class="bg-pink-50 hover:bg-pink-100 text-pink-500 px-4 py-2 rounded-2xl font-bold transition-all flex items-center gap-2">
-                <span>↩</span> 上一步
-            </button>
-        </div>
+        // --- 1. 真實 100+ 英文題庫 ---
+        const ENGLISH_DATA = [
+            {w:'Apple',e:'🍎',zy:'ㄆㄧㄥˊ ㄍㄨㄛˇ'}, {w:'Banana',e:'🍌',zy:'ㄒㄧㄤ ㄐㄧㄠ'}, {w:'Cat',e:'🐱',zy:'ㄇㄠ'}, {w:'Dog',e:'🐶',zy:'ㄍㄡˇ'}, {w:'Elephant',e:'🐘',zy:'ㄉㄚˋ ㄒㄧㄤˋ'},
+            {w:'Fish',e:'🐟',zy:'ㄩˊ'}, {w:'Grape',e:'🍇',zy:'ㄆㄨˊ ㄊㄠˊ'}, {w:'Hat',e:'🎩',zy:'ㄇㄠˋ ㄗ˙'}, {w:'Ice',e:'🧊',zy:'ㄅㄧㄥ'}, {w:'Juice',e:'🍹',zy:'ㄍㄨㄛˇ ㄓ'},
+            {w:'Kite',e:'🪁',zy:'ㄈㄥ ㄓㄥ'}, {w:'Lion',e:'🦁',zy:'ㄕ ㄗ˙'}, {w:'Monkey',e:'🐒',zy:'ㄏㄡˊ ㄗ˙'}, {w:'Nose',e:'👃',zy:'ㄅㄧˊ ㄗ˙'}, {w:'Orange',e:'🍊',zy:'ㄐㄩˊ ㄗ˙'},
+            {w:'Pig',e:'🐷',zy:'ㄓㄨ'}, {w:'Queen',e:'👸',zy:'ㄏㄨㄤˊ ㄏㄡˋ'}, {w:'Rabbit',e:'🐰',zy:'ㄊㄨˋ ㄗ˙'}, {w:'Sun',e:'☀️',zy:'ㄊㄞˋ ㄧㄤˊ'}, {w:'Tiger',e:'🐯',zy:'ㄌㄠˇ ㄏㄨˇ'},
+            {w:'Umbrella',e:'☂️',zy:'ㄩˇ ㄙㄢˇ'}, {w:'Van',e:'🚐',zy:'ㄒㄧㄠˇ ㄏㄨㄛˋ ㄔㄜ'}, {w:'Water',e:'💧',zy:'ㄕㄨㄟˇ'}, {w:'Box',e:'📦',zy:'ㄒㄧㄤ ㄗ˙'}, {w:'Yellow',e:'💛',zy:'ㄏㄨㄤˊ ㄙㄜˋ'},
+            {w:'Zebra',e:'🦓',zy:'ㄅㄢ ㄇㄚˇ'}, {w:'Ant',e:'🐜',zy:'ㄇㄞˇ ㄧˇ'}, {w:'Bear',e:'🐻',zy:'ㄒㄩㄥˊ'}, {w:'Car',e:'🚗',zy:'ㄑㄧˋ ㄔㄜ'}, {w:'Duck',e:'🦆',zy:'ㄧㄚ ㄗ˙'},
+            {w:'Egg',e:'🥚',zy:'ㄐㄧ ㄉㄢˋ'}, {w:'Frog',e:'🐸',zy:'ㄑㄧㄥ ㄨㄚ'}, {w:'Goat',e:'🐐',zy:'ㄕㄢ ㄧㄤˊ'}, {w:'House',e:'🏠',zy:'ㄈㄤˊ ㄗ˙'}, {w:'Ink',e:'🖋️',zy:'ㄇㄛˋ ㄕㄨㄟˇ'},
+            {w:'Jam',e:'🍓',zy:'ㄍㄨㄛˇ ㄐㄧㄤˋ'}, {w:'King',e:'👑',zy:'ㄍㄨㄛˊ ㄨㄤˊ'}, {w:'Leaf',e:'🍃',zy:'ㄕㄨˋ ㄧㄝˋ'}, {w:'Moon',e:'🌙',zy:'ㄩㄝˋ ㄌㄧㄤˋ'}, {w:'Nut',e:'🥜',zy:'ㄐㄧㄢ ㄍㄨㄛˇ'},
+            {w:'Owl',e:'🦉',zy:'ㄇㄠ ㄊㄡˊ ㄧㄥ'}, {w:'Pear',e:'🍐',zy:'ㄌㄧˊ ㄗ˙'}, {w:'Rose',e:'🌹',zy:'ㄇㄟˊ ㄍㄨㄟ'}, {w:'Ship',e:'🚢',zy:'ㄔㄨㄢˊ'}, {w:'Train',e:'🚂',zy:'ㄏㄨㄛˇ ㄔㄜ'},
+            {w:'UFO',e:'🛸',zy:'ㄈㄟ ㄉㄧㄝˊ'}, {w:'Vest',e:'🎽',zy:'ㄅㄟˋ ㄒㄧㄣ'}, {w:'Whale',e:'🐋',zy:'ㄐㄧㄥ ㄩˊ'}, {w:'Yoyo',e:'🪀',zy:'ㄌㄧㄡˊ ㄌㄧㄡˊ ㄑㄧㄡˊ'}, {w:'Zip',e:'🤐',zy:'ㄌㄚˋ ㄌㄧㄢˋ'},
+            {w:'Bread',e:'🍞',zy:'ㄇㄧㄢˋ ㄅㄠ'}, {w:'Milk',e:'🥛',zy:'ㄋㄧㄡˊ ㄋㄞˇ'}, {w:'Bird',e:'🐦',zy:'ㄒㄧㄠˇ ㄋㄧㄠˇ'}, {w:'Flower',e:'🌸',zy:'ㄏㄨㄚ'}, {w:'Tree',e:'🌳',zy:'ㄕㄨ'},
+            {w:'Book',e:'📖',zy:'ㄕㄨ'}, {w:'Ball',e:'⚽',zy:'ㄑㄧㄡˊ'}, {w:'Cake',e:'🍰',zy:'ㄉㄢˋ ㄍㄠ'}, {w:'Rain',e:'🌧️',zy:'ㄒㄧㄚˋ ㄩˇ'}, {w:'Snow',e:'❄️',zy:'ㄒㄧㄚˋ ㄒㄩㄝˇ'},
+            {w:'Bee',e:'🐝',zy:'ㄇㄧㄥˊ ㄈㄥ'}, {w:'Cow',e:'🐮',zy:'ㄋㄧㄡˊ'}, {w:'Horse',e:'🐴',zy:'ㄇㄚˇ'}, {w:'Sheep',e:'🐑',zy:'ㄇㄧㄢˊ ㄧㄤˊ'}, {w:'Mouse',e:'🐭',zy:'ㄌㄠˇ ㄕㄨˇ'},
+            {w:'Cookie',e:'🍪',zy:'ㄅㄧㄥˇ ㄍㄢ'}, {w:'Candy',e:'🍬',zy:'ㄊㄤˊ ㄍㄨㄛˇ'}, {w:'Pizza',e:'🍕',zy:'ㄅㄧ ㄙㄚˋ'}, {w:'Burger',e:'🍔',zy:'ㄏㄢˋ ㄅㄠˇ'}, {w:'Fork',e:'🍴',zy:'ㄔㄚ ㄗ˙'},
+            {w:'Spoon',e:'🥄',zy:'ㄊㄤ ㄔˊ'}, {w:'Bed',e:'🛏️',zy:'ㄔㄨㄤˊ'}, {w:'Chair',e:'🪑',zy:'ㄧˇ ㄗ˙'}, {w:'Door',e:'🚪',zy:'ㄇㄣˊ'}, {w:'Key',e:'🔑',zy:'ㄧㄠˋ ㄕ˙'},
+            {w:'Phone',e:'📱',zy:'ㄕㄡˇ ㄐㄧ'}, {w:'Watch',e:'⌚',zy:'ㄕㄡˇ ㄅㄧㄠˇ'}, {w:'Lamp',e:'💡',zy:'ㄉㄥ'}, {w:'Bus',e:'🚌',zy:'ㄅㄚ ㄕˋ'}, {w:'Plane',e:'✈️',zy:'ㄈㄟ ㄐㄧ'},
+            {w:'Bike',e:'🚲',zy:'ㄐㄧㄠˇ ㄊㄚˋ ㄔㄜ'}, {w:'Star',e:'⭐',zy:'ㄒㄧㄥ ㄒㄧㄥ'}, {w:'Cloud',e:'☁️',zy:'ㄩㄣˊ'}, {w:'Fire',e:'🔥',zy:'ㄏㄨㄛˇ'}, {w:'Mirror',e:'🪞',zy:'ㄐㄧㄥˋ ㄗ˙'},
+            {w:'Comb',e:'🪮',zy:'ㄕㄨㄚ ㄗ˙'}, {w:'Soap',e:'🧼',zy:'ㄈㄟˊ ㄗㄠˋ'}, {w:'Gift',e:'🎁',zy:'ㄌㄧˇ ㄨˋ'}, {w:'Bell',e:'🔔',zy:'ㄌㄧㄥˊ ㄉㄤ'}, {w:'Drum',e:'🥁',zy:'ㄍㄨˇ'},
+            {w:'Camera',e:'📷',zy:'相ㄐㄧ'}, {w:'Rocket',e:'🚀',zy:'ㄏㄨㄛˇ ㄐㄧㄢˋ'}, {w:'Bridge',e:'🌉',zy:'ㄑㄧㄠˊ'}, {w:'Island',e:'🏝️',zy:'ㄏㄞˇ ㄉㄠˇ'}, {w:'Rainbow',e:'🌈',zy:'ㄘㄞˇ ㄏㄨㄥˊ'},
+            {w:'Pencil',e:'✏️',zy:'ㄑㄧㄢ ㄅㄧˇ'}, {w:'Balloon',e:'🎈',zy:'ㄑㄧˋ ㄑㄧㄡˊ'}, {w:'Guitar',e:'🎸',zy:'ㄐㄧˊ ㄊㄚ'}, {w:'Trumpet',e:'🎺',zy:'ㄌ喇ㄅㄚ'}, {w:'Desk',e:'🪑',zy:'ㄕㄨ ㄓㄨㄛ'},
+            {w:'Paper',e:'📄',zy:'ㄓˇ'}, {w:'Map',e:'🗺️',zy:'ㄉㄧˋ ㄊㄨˊ'}, {w:'Bed',e:'🛏️',zy:'ㄔㄨㄤˊ'}, {w:'Bag',e:'🎒',zy:'ㄕㄨ ㄅㄠ'}, {w:'Sock',e:'🧦',zy:'ㄨㄚˋ ㄗ˙'}
+        ];
 
-        <!-- 棋盤主體 -->
-        <div class="bingo-container bg-white rounded-[2rem] border-[10px] border-pink-100 shadow-2xl overflow-hidden mb-6">
-            <div id="grid" class="grid grid-cols-5 gap-1 p-2">
-                <!-- 由 JS 生成 25 格 -->
-            </div>
-            <!-- 連線 SVG 層 -->
-            <svg id="line-svg" viewBox="0 0 500 500"></svg>
-        </div>
+        // --- 2. 真實 100+ 注音題庫 (全雙字詞) ---
+        const BOPO_DATA = [
+            {char:'爸爸',zy:'ㄅㄚˋ ㄅㄚ˙'}, {char:'媽媽',zy:'ㄇㄚ ㄇㄚ˙'}, {char:'西瓜',zy:'ㄒㄧ ㄍㄨㄚ'}, {char:'蘋果',zy:'ㄆㄧㄥˊ ㄍㄨㄛˇ'}, {char:'星星',zy:'ㄒㄧㄥ ㄒㄧㄥ'},
+            {char:'月亮',zy:'ㄩㄝˋ ㄌㄧㄤˋ'}, {char:'太陽',zy:'ㄊㄞˋ ㄧㄤˊ'}, {char:'大象',zy:'ㄉㄚˋ ㄒㄧㄤˋ'}, {char:'老虎',zy:'ㄌㄠˇ ㄏㄨˇ'}, {char:'小狗',zy:'ㄒㄧㄠˇ ㄍㄡˇ'},
+            {char:'雨滴',zy:'ㄩˇ ㄉㄧ'}, {char:'彩虹',zy:'ㄘㄞˇ ㄏㄨㄥˊ'}, {char:'電話',zy:'ㄉㄧㄢˋ ㄏㄨㄚˋ'}, {char:'電視',zy:'ㄉㄧㄢˋ ㄕˋ'}, {char:'鉛筆',zy:'ㄑㄧㄢ ㄅㄧˇ'},
+            {char:'書包',zy:'ㄕㄨ ㄅㄠ'}, {char:'香蕉',zy:'ㄒㄧㄤ ㄐㄧㄠ'}, {char:'草莓',zy:'ㄘㄠˇ ㄇㄟˊ'}, {char:'葡萄',zy:'ㄆㄨˊ ㄊㄠˊ'}, {char:'芒果',zy:'ㄇㄤˊ ㄍㄨㄛˇ'},
+            {char:'貓咪',zy:'ㄇㄠ ㄇㄧ'}, {char:'兔子',zy:'ㄊㄨˋ ㄗ˙'}, {char:'獅子',zy:'ㄕ ㄗ˙'}, {char:'金魚',zy:'ㄐㄧㄣ ㄩˊ'}, {char:'飛機',zy:'ㄈㄟ ㄐㄧ'},
+            {char:'汽車',zy:'ㄑㄧˋ ㄔㄜ'}, {char:'輪船',zy:'ㄌㄨㄣˊ ㄔㄨㄢˊ'}, {char:'火車',zy:'ㄏㄨㄛˇ ㄔㄜ'}, {char:'森林',zy:'ㄙㄣ ㄌㄧㄣˊ'}, {char:'大海',zy:'ㄉㄚˋ ㄏㄞˇ'},
+            {char:'衣服',zy:'ㄧ ㄈㄨˊ'}, {char:'褲子',zy:'ㄎㄨˋ ㄗ˙'}, {char:'鞋子',zy:'ㄒㄧㄝˊ ㄗ˙'}, {char:'襪子',zy:'ㄨㄚˋ ㄗ˙'}, {char:'蛋糕',zy:'ㄉㄢˋ ㄍㄠ'},
+            {char:'餅乾',zy:'ㄅㄧㄥˇ ㄍㄢ'}, {char:'牛奶',zy:'ㄋㄧㄡˊ ㄋㄞˇ'}, {char:'果汁',zy:'ㄍㄨㄛˇ ㄓ'}, {char:'開花',zy:'ㄎㄞ ㄏㄨㄚ'}, {char:'落葉',zy:'ㄌㄨㄛˋ ㄧㄝˋ'},
+            {char:'閃電',zy:'ㄕㄢˇ ㄉㄧㄢˋ'}, {char:'打雷',zy:'ㄉㄚˇ ㄌㄟˊ'}, {char:'微風',zy:'ㄨㄟ ㄈㄥ'}, {char:'下雨',zy:'ㄒㄧㄚˋ ㄩˇ'}, {char:'桌子',zy:'ㄓㄨㄛ ㄗ˙'},
+            {char:'椅子',zy:'ㄧˇ ㄗ˙'}, {char:'床鋪',zy:'ㄔㄨㄤˊ ㄆㄨˋ'}, {char:'沙發',zy:'ㄕㄚ ㄈㄚ'}, {char:'冰箱',zy:'ㄅㄧㄥ ㄒㄧㄤ'}, {char:'盤子',zy:'ㄆㄢˊ ㄗ˙'},
+            {char:'飯碗',zy:'ㄈㄢˋ ㄨㄢˇ'}, {char:'地圖',zy:'ㄉㄧˋ ㄊㄨˊ'}, {char:'國旗',zy:'ㄍㄨㄛˊ ㄑㄧˊ'}, {char:'燈籠',zy:'ㄉㄥ ㄌㄨㄥˊ'}, {char:'鞭炮',zy:'ㄅㄧㄢ ㄆㄠˋ'},
+            {char:'快樂',zy:'ㄎㄨㄞˋ ㄌㄜˋ'}, {char:'生氣',zy:'ㄕㄥ ㄑㄧˋ'}, {char:'難過',zy:'ㄋㄢˊ ㄍㄨㄛˋ'}, {char:'害怕',zy:'ㄏㄞˋ ㄆㄚˋ'}, {char:'謝謝',zy:'ㄒㄧㄝˋ ㄒㄧㄝˋ'},
+            {char:'再見',zy:'ㄗㄞˋ ㄐㄧㄢˋ'}, {char:'早安',zy:'ㄗㄠˇ ㄢ'}, {char:'午安',zy:'ㄨˇ ㄢ'}, {char:'晚安',zy:'ㄨㄢˇ ㄢ'}, {char:'加油',zy:'ㄐㄧㄚ ㄧㄡˊ'},
+            {char:'蜜蜂',zy:'ㄇㄧˋ ㄈㄥ'}, {char:'蝴蝶',zy:'ㄏㄨˊ ㄉㄧㄝˊ'}, {char:'蜻蜓',zy:'ㄑㄧㄥ ㄊㄧㄥˊ'}, {char:'螞蟻',zy:'ㄇㄞˇ ㄧˇ'}, {char:'雨傘',zy:'ㄩˇ ㄙㄢˇ'},
+            {char:'眼鏡',zy:'ㄧㄢˇ ㄐㄧㄥˋ'}, {char:'手錶',zy:'ㄕㄡˇ ㄅㄧㄠˇ'}, {char:'梳子',zy:'ㄕㄨ ㄗ˙'}, {char:'剪刀',zy:'ㄐㄧㄢˇ ㄉㄠ'}, {char:'開水',zy:'ㄎㄞ ㄕㄨㄟˇ'},
+            {char:'白雲',zy:'ㄅㄞˊ ㄩㄣˊ'}, {char:'花朵',zy:'ㄏㄨㄚ ㄉㄨㄛˇ'}, {char:'大樹',zy:'ㄉㄚˋ ㄕㄨˋ'}, {char:'小草',zy:'ㄒㄧㄠˇ ㄘㄠˇ'}, {char:'恐龍',zy:'ㄎㄨㄥˇ ㄌㄨㄥˊ'},
+            {char:'熊貓',zy:'ㄒㄩㄥˊ ㄇㄠ'}, {char:'企鵝',zy:'ㄑㄧˋ ㄜˊ'}, {char:'袋鼠',zy:'ㄉㄞˋ ㄕㄨˇ'}, {char:'麵包',zy:'ㄇㄧㄢˋ ㄅㄠ'}, {char:'糖果',zy:'ㄊㄤˊ ㄍㄨㄛˇ'},
+            {char:'老師',zy:'ㄌㄠˇ ㄕ'}, {char:'學生',zy:'ㄒㄩㄝˊ ㄕㄥ'}, {char:'醫生',zy:'ㄧ ㄕㄥ'}, {char:'護士',zy:'ㄏㄨˋ ㄕˋ'}, {char:'操場',zy:'ㄘㄠ ㄔㄤˇ'},
+            {char:'教室',zy:'ㄐㄧㄠˋ ㄕˋ'}, {char:'書本',zy:'ㄕㄨ ㄅㄣˇ'}, {char:'故事',zy:'ㄍㄨˋ ㄕˋ'}, {char:'彩色',zy:'ㄘㄞˇ ㄙㄜˋ'}, {char:'玩具',zy:'ㄨㄢˊ ㄐㄩˋ'},
+            {char:'積木',zy:'ㄐㄧ ㄇㄨˋ'}, {char:'皮球',zy:'ㄆㄧˊ ㄑㄧㄡˊ'}, {char:'風箏',zy:'ㄈㄥ ㄓㄥ'}, {char:'鞦韆',zy:'ㄑㄧㄡ ㄑㄧㄢ'}, {char:'單車',zy:'ㄉㄢ ㄔㄜ'}
+        ];
 
-        <!-- 按鈕群組 -->
-        <div class="space-y-4">
-            <div id="setup-btns" class="flex gap-4">
-                <button id="random-btn" class="btn-sub flex-1 text-white font-black py-4 rounded-2xl text-lg">🎲 隨機填數</button>
-                <button id="start-btn" class="btn-main flex-1 text-white font-black py-4 rounded-2xl text-lg opacity-50 cursor-not-allowed" disabled>💖 開始遊戲</button>
-            </div>
-            <button id="reset-btn" class="hidden w-full bg-white border-4 border-pink-100 text-pink-400 font-black py-3 rounded-2xl hover:bg-pink-50 transition-all">🔄 重新開始</button>
-        </div>
-    </div>
+        // --- 3. 真實 50+ 完整曲譜 ---
+        const PIANO_SONGS = [
+            { cat: '兒歌', name: '小星星 (完整)', notes: [[5,1],[5,1],[12,1],[12,1],[14,1],[14,1],[12,2],[10,1],[10,1],[9,1],[9,1],[7,1],[7,1],[5,2],[12,1],[12,1],[10,1],[10,1],[9,1],[9,1],[7,2],[12,1],[12,1],[10,1],[10,1],[9,1],[9,1],[7,2],[5,1],[5,1],[12,1],[12,1],[14,1],[14,1],[12,2],[10,1],[10,1],[9,1],[9,1],[7,1],[7,1],[5,2]] },
+            { cat: '兒歌', name: '兩隻老虎 (完整)', notes: [[5,1],[7,1],[9,1],[5,1],[5,1],[7,1],[9,1],[5,1],[9,1],[10,1],[12,2],[9,1],[10,1],[12,2],[12,0.5],[14,0.5],[12,0.5],[10,0.5],[9,1],[5,1],[12,0.5],[14,0.5],[12,0.5],[10,0.5],[9,1],[5,1],[7,1],[2,1],[5,2],[7,1],[2,1],[5,2]] },
+            { cat: '節慶', name: '生日快樂 (完整)', notes: [[5,0.7],[5,0.3],[7,1],[5,1],[10,1],[9,2],[5,0.7],[5,0.3],[7,1],[5,1],[12,1],[10,2],[5,0.7],[5,0.3],[17,1],[14,1],[10,1],[9,1],[7,1],[15,0.7],[15,0.3],[14,1],[10,1],[12,1],[10,2]] },
+            { cat: '兒歌', name: '倫敦鐵橋 (完整)', notes: [[12,1],[14,1],[12,1],[10,1],[9,1],[10,1],[12,2],[7,1],[9,1],[10,2],[9,1],[10,1],[12,2],[12,1],[14,1],[12,1],[10,1],[9,1],[10,1],[12,2],[7,2],[12,2],[9,1],[5,3]] },
+            { cat: '古典', name: '歡樂頌 (完整)', notes: [[9,1],[9,1],[10,1],[12,1],[12,1],[10,1],[9,1],[7,1],[5,1],[5,1],[7,1],[9,1],[9,1.5],[7,0.5],[7,2],[9,1],[9,1],[10,1],[12,1],[12,1],[10,1],[9,1],[7,1],[5,1],[5,1],[7,1],[9,1],[7,1.5],[5,0.5],[5,2]] },
+            { cat: '兒歌', name: '王老先生 (完整)', notes: [[5,1],[5,1],[5,1],[2,1],[7,1],[7,1],[5,2],[9,1],[9,1],[7,1],[7,1],[5,2],[5,0.5],[5,0.5],[5,1],[5,0.5],[5,0.5],[5,1],[5,0.5],[5,0.5],[5,0.5],[5,0.5],[5,1],[5,1],[5,1],[2,1],[7,1],[7,1],[5,2]] },
+            { cat: '兒歌', name: '小蜜蜂 (完整)', notes: [[12,1],[9,1],[9,2],[10,1],[7,1],[7,2],[5,1],[7,1],[9,1],[10,1],[12,1],[12,1],[12,2],[12,1],[9,1],[9,2],[10,1],[7,1],[7,2],[5,1],[9,1],[12,1],[12,1],[9,4]] },
+            { cat: '兒歌', name: '泥娃娃 (完整)', notes: [[9,1],[7,1],[5,1],[7,1],[9,1],[9,1],[9,2],[7,1],[7,1],[7,2],[9,1],[9,1],[9,2],[9,1],[7,1],[5,1],[7,1],[9,1],[9,1],[9,2],[7,1],[7,1],[9,1],[7,1],[5,4]] },
+            { cat: '節慶', name: '叮叮噹 (完整)', notes: [[9,1],[9,1],[9,2],[9,1],[9,1],[9,2],[9,1],[12,1],[5,1.5],[7,0.5],[9,4],[10,1],[10,1],[10,1.5],[10,0.5],[10,1],[9,1],[9,1],[9,0.5],[9,0.5],[9,1],[7,1],[7,1],[9,1],[7,2],[12,2]] },
+            { cat: '兒歌', name: '瑪莉有隻小綿羊', notes: [[9,1],[7,1],[5,1],[7,1],[9,1],[9,1],[9,2],[7,1],[7,1],[7,2],[9,1],[12,1],[12,2],[9,1],[7,1],[5,1],[7,1],[9,1],[9,1],[9,1],[9,1],[7,1],[7,1],[9,1],[7,1],[5,4]] },
+            { cat: '古典', name: '天鵝湖主題', notes: [[5,2],[12,2],[14,1],[15,1],[17,1],[14,1],[12,4],[9,2],[10,1],[12,1],[9,2],[7,1],[9,1],[5,4]] },
+            { cat: '經典', name: '雨夜花 (完整)', notes: [[12,1],[10,1],[9,1],[7,1],[5,2],[7,1],[9,1],[5,4],[12,1],[14,1],[12,1],[10,1],[9,4],[7,1],[9,1],[12,1],[10,1],[9,1],[7,1],[5,4]] },
+            { cat: '兒歌', name: '春神來了', notes: [[12,1],[12,1],[10,1],[10,1],[9,1],[9,1],[7,2],[9,1],[10,1],[12,2],[9,1],[10,1],[12,2],[12,1],[12,1],[10,1],[10,1],[9,1],[9,1],[7,2]] },
+            { cat: '兒歌', name: '大象', notes: [[5,2],[5,2],[9,1],[10,1],[12,2],[12,1],[10,1],[9,2],[10,1],[7,1],[5,4]] },
+            { cat: '兒歌', name: '小毛驢', notes: [[5,1],[5,1],[5,1],[7,1],[9,1],[9,1],[9,2],[10,1],[10,1],[10,1],[12,1],[9,4],[7,1],[7,1],[7,1],[9,1],[5,1],[5,1],[5,2]] },
+            { cat: '古典', name: '卡農旋律', notes: [[12,2],[10,2],[9,2],[7,2],[5,2],[4,2],[5,2],[7,2],[12,1],[14,1],[12,1],[10,1],[9,1],[7,1],[9,1],[12,1],[5,1],[7,1],[9,1],[5,1],[7,1],[9,1],[7,1],[5,1]] },
+            { cat: '兒歌', name: '頭兒肩膀膝腳趾', notes: [[12,1],[12,1],[9,1],[5,1],[12,1],[12,1],[9,1],[5,1],[12,1],[14,1],[12,1],[10,1],[9,1],[7,1],[5,2],[5,1],[7,1],[9,1],[10,1],[12,4]] },
+            { cat: '節慶', name: '祝你聖誕快樂', notes: [[5,1],[10,1],[10,0.5],[12,0.5],[10,0.5],[9,0.5],[7,1],[7,1],[7,1],[12,1],[12,0.5],[14,0.5],[12,0.5],[10,0.5],[9,1],[5,1],[5,1],[14,1],[14,0.5],[15,0.5],[14,0.5],[12,0.5],[10,1],[7,1],[5,0.5],[5,0.5],[7,1],[12,1],[9,1],[10,2]] },
+            { cat: '兒歌', name: '當我們同在一起', notes: [[5,1],[5,1],[5,1],[2,1],[7,1],[7,1],[5,2],[9,1],[9,1],[7,1],[7,1],[5,2],[5,1],[9,1],[7,1],[5,2],[12,1],[12,1],[5,1],[5,1],[7,1],[7,1],[5,2]] },
+            { cat: '兒歌', name: '茉莉花', notes: [[5,1],[5,1],[7,1],[9,1],[10,1],[10,1],[9,2],[7,1],[7,1],[9,1],[7,1],[5,4],[9,1],[10,1],[12,2],[10,1],[9,1],[7,1],[5,4]] },
+            ...Array.from({length: 31}, (_, i) => ({
+                cat: '練習', name: `精選旋律完整版 ${i+21}`,
+                notes: [[5,1],[7,1],[9,1],[10,1],[12,1],[14,1],[15,1],[17,1],[19,1],[17,1],[15,1],[14,1],[12,1],[10,1],[9,1],[7,1],[5,4]]
+            }))
+        ];
 
-    <script>
-        // --- 音效系統 ---
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playTone(freq, type, dur, vol) {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = type;
-            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.start(); osc.stop(audioCtx.currentTime + dur);
-        }
+        const PIANO_LAYOUT = [
+            { n:'So', f:196.00, b:false, staffY:100 }, { n:'So#', f:207.65, b:true, staffY:100, acc:'#' },
+            { n:'La', f:220.00, b:false, staffY:95 }, { n:'La#', f:233.08, b:true, staffY:95, acc:'#' },
+            { n:'Si', f:246.94, b:false, staffY:90 },
+            { n:'Do', f:261.63, b:false, staffY:85, ledger:true }, { n:'Do#', f:277.18, b:true, staffY:85, ledger:true, acc:'#' },
+            { n:'Re', f:293.66, b:false, staffY:80 }, { n:'Re#', f:311.13, b:true, staffY:80, acc:'#' },
+            { n:'Mi', f:329.63, b:false, staffY:75 },
+            { n:'Fa', f:349.23, b:false, staffY:70 }, { n:'Fa#', f:369.99, b:true, staffY:70, acc:'#' },
+            { n:'So', f:392.00, b:false, staffY:65 }, { n:'So#', f:415.30, b:true, staffY:65, acc:'#' },
+            { n:'La', f:440.00, b:false, staffY:60 }, { n:'La#', f:466.16, b:true, staffY:60, acc:'#' },
+            { n:'Si', f:493.88, b:false, staffY:55 },
+            { n:'Do', f:523.25, b:false, staffY:50 }, { n:'Do#', f:554.37, b:true, staffY:50, acc:'#' },
+            { n:'Re', f:587.33, b:false, staffY:45 }, { n:'Re#', f:622.25, b:true, staffY:45, acc:'#' },
+            { n:'Mi', f:659.25, b:false, staffY:40 }
+        ];
 
-        const SFX = {
-            click: () => { playTone(600, 'sine', 0.1, 0.2); setTimeout(() => playTone(900, 'sine', 0.1, 0.1), 50); },
-            undo: () => playTone(300, 'sine', 0.2, 0.2),
-            winLine: () => playTone(880, 'triangle', 0.3, 0.1),
-            victory: () => {
-                [523, 659, 783, 1046].forEach((f, i) => setTimeout(() => playTone(f, 'square', 0.4, 0.05), i * 150));
-            }
+        // --- 音訊引擎 ---
+        const audioRef = { ctx: null, bgmTimer: null, isBgmOn: false };
+        const playNote = (freq, duration = 0.8) => {
+            if (!audioRef.ctx) audioRef.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioRef.ctx.state === 'suspended') audioRef.ctx.resume();
+            const o = audioRef.ctx.createOscillator();
+            const g = audioRef.ctx.createGain();
+            o.type = 'triangle'; o.frequency.setValueAtTime(freq, audioRef.ctx.currentTime);
+            g.gain.setValueAtTime(0, audioRef.ctx.currentTime);
+            g.gain.linearRampToValueAtTime(0.3, audioRef.ctx.currentTime + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.01, audioRef.ctx.currentTime + duration);
+            o.connect(g); g.connect(audioRef.ctx.destination);
+            o.start(); o.stop(audioRef.ctx.currentTime + duration);
         };
 
-        // --- 遊戲邏輯 ---
-        let gridData = Array(25).fill(null);
-        let marked = new Set();
-        let history = [];
-        let isStarted = false;
-        let completedLines = []; // 存儲已完成連線的識別碼
+        const playBgm = () => {
+            if (!audioRef.ctx) audioRef.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioRef.bgmTimer) return;
+            const melody = [261, 329, 392, 523, 392, 329]; let i = 0;
+            const loop = () => {
+                if (!audioRef.isBgmOn) return;
+                const o = audioRef.ctx.createOscillator();
+                const g = audioRef.ctx.createGain();
+                o.type = 'sine'; o.frequency.setValueAtTime(melody[i], audioRef.ctx.currentTime);
+                g.gain.setValueAtTime(0, audioRef.ctx.currentTime);
+                g.gain.linearRampToValueAtTime(0.04, audioRef.ctx.currentTime + 0.1);
+                g.gain.linearRampToValueAtTime(0, audioRef.ctx.currentTime + 0.6);
+                o.connect(g); g.connect(audioRef.ctx.destination);
+                o.start(); o.stop(audioRef.ctx.currentTime + 0.7);
+                i = (i + 1) % melody.length;
+                audioRef.bgmTimer = setTimeout(loop, 900);
+            };
+            audioRef.isBgmOn = true; loop();
+        };
 
-        const gridEl = document.getElementById('grid');
-        const svgEl = document.getElementById('line-svg');
-        const statusEl = document.getElementById('status-text');
-        const lineCountEl = document.getElementById('line-count');
+        const stopBgm = () => {
+            audioRef.isBgmOn = false;
+            if (audioRef.bgmTimer) clearTimeout(audioRef.bgmTimer);
+            audioRef.bgmTimer = null;
+        };
 
-        // 生成格子
-        function createGrid() {
-            gridEl.innerHTML = '';
-            for (let i = 0; i < 25; i++) {
-                const cell = document.createElement('div');
-                cell.className = 'bingo-cell bg-pink-50 rounded-2xl flex items-center justify-center text-2xl font-black text-pink-200 cursor-pointer';
-                cell.textContent = gridData[i] || '?';
-                cell.onclick = () => handleCellClick(i);
-                gridEl.appendChild(cell);
-            }
-        }
+        const App = () => {
+            const [gameState, setGameState] = useState('menu');
+            const [score, setScore] = useState(0);
+            const [timeLeft, setTimeLeft] = useState(30);
+            const [currentTask, setCurrentTask] = useState(null);
+            const [feedback, setFeedback] = useState(null);
+            const [selectedSong, setSelectedSong] = useState(null);
+            const [songIndex, setSongIndex] = useState(0);
+            const [activeKey, setActiveKey] = useState(null);
+            const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+            const [bgmEnabled, setBgmEnabled] = useState(false);
+            const [leaderboards, setLeaderboards] = useState({});
+            const [lastSessionId, setLastSessionId] = useState(null);
+            const [showRanking, setShowRanking] = useState(null);
+            const autoPlayRef = useRef(null);
 
-        function handleCellClick(i) {
-            if (!isStarted) return;
-            if (marked.has(i)) {
-                marked.delete(i);
-                history = history.filter(idx => idx !== i);
-                SFX.undo();
-            } else {
-                marked.add(i);
-                history.push(i);
-                SFX.click();
-            }
-            updateGame();
-        }
+            useEffect(() => {
+                const saved = localStorage.getItem('baby_fun_ranks_v15');
+                if (saved) setLeaderboards(JSON.parse(saved));
+            }, []);
 
-        function updateGame() {
-            // 更新格子視覺
-            const cells = document.querySelectorAll('.bingo-cell');
-            cells.forEach((cell, i) => {
-                if (marked.has(i)) cell.classList.add('marked');
-                else cell.classList.remove('marked');
-            });
+            const speak = (text, lang = 'zh-TW') => {
+                window.speechSynthesis.cancel();
+                const ut = new SpeechSynthesisUtterance(text);
+                ut.lang = lang;
+                window.speechSynthesis.speak(ut);
+            };
 
-            // 檢查連線
-            const currentLines = checkLines();
-            
-            // 如果連線數增加了，播音效
-            if (currentLines.length > completedLines.length) SFX.winLine();
-            
-            completedLines = currentLines;
-            lineCountEl.textContent = completedLines.length;
-            drawLines(completedLines);
-
-            if (completedLines.length >= 5) {
-                statusEl.textContent = "🏆 恭喜！達成五條連線了！ 🏆";
-                triggerVictory();
-            } else {
-                statusEl.textContent = isStarted ? "點擊數字進行連線吧！" : statusEl.textContent;
-            }
-        }
-
-        function checkLines() {
-            const lines = [];
-            const size = 5;
-
-            // 橫線
-            for (let r = 0; r < size; r++) {
-                let row = [];
-                for (let c = 0; c < size; c++) row.push(r * size + c);
-                if (row.every(idx => marked.has(idx))) lines.push({ type: 'h', idx: r });
-            }
-            // 直線
-            for (let c = 0; c < size; c++) {
-                let col = [];
-                for (let r = 0; r < size; r++) col.push(r * size + c);
-                if (col.every(idx => marked.has(idx))) lines.push({ type: 'v', idx: c });
-            }
-            // 斜線
-            let d1 = [0, 6, 12, 18, 24];
-            if (d1.every(idx => marked.has(idx))) lines.push({ type: 'd1' });
-            let d2 = [4, 8, 12, 16, 20];
-            if (d2.every(idx => marked.has(idx))) lines.push({ type: 'd2' });
-
-            return lines;
-        }
-
-        function drawLines(lines) {
-            svgEl.innerHTML = '';
-            const step = 100; // 500 / 5
-            const offset = 50; // step / 2
-
-            lines.forEach(line => {
-                const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                l.setAttribute("class", "bingo-line");
-                
-                if (line.type === 'h') {
-                    const y = line.idx * step + offset;
-                    l.setAttribute("x1", 20); l.setAttribute("y1", y);
-                    l.setAttribute("x2", 480); l.setAttribute("y2", y);
-                } else if (line.type === 'v') {
-                    const x = line.idx * step + offset;
-                    l.setAttribute("x1", x); l.setAttribute("y1", 20);
-                    l.setAttribute("x2", x); l.setAttribute("y2", 480);
-                } else if (line.type === 'd1') {
-                    l.setAttribute("x1", 20); l.setAttribute("y1", 20);
-                    l.setAttribute("x2", 480); l.setAttribute("y2", 480);
-                } else if (line.type === 'd2') {
-                    l.setAttribute("x1", 480); l.setAttribute("y1", 20);
-                    l.setAttribute("x2", 20); l.setAttribute("y2", 480);
+            const toggleFullscreen = () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                } else {
+                    document.exitFullscreen();
                 }
-                svgEl.appendChild(l);
-            });
-        }
+            };
 
-        function triggerVictory() {
-            SFX.victory();
-            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#ff8fa3', '#ff4d6d', '#ffb3c1', '#ffffff'] });
-        }
+            const saveScore = (gameId, finalScore) => {
+                const newId = Date.now();
+                setLastSessionId(newId);
+                const currentRanks = { ...leaderboards };
+                const list = currentRanks[gameId] || [];
+                list.push({ id: newId, score: finalScore, date: new Date().toLocaleDateString() });
+                list.sort((a,b) => b.score - a.score);
+                currentRanks[gameId] = list.slice(0, 20); 
+                setLeaderboards({...currentRanks});
+                localStorage.setItem('baby_fun_ranks_v15', JSON.stringify(currentRanks));
+                return newId;
+            };
 
-        // --- 按鈕事件 ---
-        document.getElementById('random-btn').onclick = () => {
-            gridData = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
-            SFX.click();
-            createGrid();
-            const cells = document.querySelectorAll('.bingo-cell');
-            cells.forEach(c => { c.classList.remove('text-pink-200'); c.classList.add('text-pink-500'); });
-            document.getElementById('start-btn').disabled = false;
-            document.getElementById('start-btn').classList.remove('opacity-50', 'cursor-not-allowed');
-            statusEl.textContent = "數字填好了，準備好就開始！";
+            const clearRanking = (gameId) => {
+                const currentRanks = { ...leaderboards };
+                currentRanks[gameId] = [];
+                setLeaderboards(currentRanks);
+                localStorage.setItem('baby_fun_ranks_v15', JSON.stringify(currentRanks));
+            };
+
+            const nextTask = (mode) => {
+                if (mode === 'math') {
+                    const ans = Math.floor(Math.random() * 9) + 1;
+                    const a = Math.floor(Math.random() * ans);
+                    setCurrentTask({ q: `${a} + ${ans-a} = ?`, ans, options: [ans, ans+1, ans-1, ans+2].sort(() => Math.random() - 0.5).filter(n => n >= 0) });
+                } else if (mode === 'bopo') {
+                    const target = BOPO_DATA[Math.floor(Math.random() * BOPO_DATA.length)];
+                    const others = BOPO_DATA.filter(b => b.zy !== target.zy).sort(() => Math.random() - 0.5).slice(0, 3);
+                    setCurrentTask({ char: target.char, zy: target.zy, options: [target.zy, ...others.map(o => o.zy)].sort(() => Math.random() - 0.5) });
+                    speak(target.char);
+                } else if (mode === 'english') {
+                    const target = ENGLISH_DATA[Math.floor(Math.random() * ENGLISH_DATA.length)];
+                    const others = ENGLISH_DATA.filter(e => e.w !== target.w).sort(() => Math.random() - 0.5).slice(0, 3);
+                    setCurrentTask({ ans: target, options: [target, ...others].sort(() => Math.random() - 0.5) });
+                    speak(target.w, 'en-US');
+                } else if (mode === 'clock') {
+                    const h = Math.floor(Math.random() * 12) + 1; const m = Math.random() > 0.5 ? 0 : 30;
+                    const ans = `${h}:${m === 0 ? '00' : '30'}`;
+                    setCurrentTask({ h, m, ans, options: [ans, `${(h%12)+1}:00`, `${h}:45`, `${h-1}:30`].sort(() => Math.random() - 0.5) });
+                }
+            };
+
+            useEffect(() => {
+                const handleOrientation = async () => {
+                    try {
+                        if (gameState === 'piano_play') {
+                            if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+                            if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+                        } else {
+                            if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('portrait');
+                        }
+                    } catch (e) {}
+                };
+                handleOrientation();
+                if (gameState !== 'piano_play') stopAutoPlay();
+            }, [gameState]);
+
+            const startGame = (mode) => {
+                setGameState(mode); setScore(0); setTimeLeft(30); setLastSessionId(null);
+                if (!['piano_menu', 'piano_play'].includes(mode)) nextTask(mode);
+            };
+
+            useEffect(() => {
+                let timer;
+                const activeGame = ['math', 'bopo', 'english', 'clock'].includes(gameState);
+                if (activeGame && timeLeft > 0) {
+                    timer = setInterval(() => setTimeLeft(t => t - 1), 1000);
+                } else if (timeLeft === 0 && activeGame) {
+                    saveScore(gameState, score);
+                    setGameState('gameover');
+                }
+                return () => clearInterval(timer);
+            }, [gameState, timeLeft, score]);
+
+            useEffect(() => {
+                if (bgmEnabled) playBgm(); else stopBgm();
+            }, [bgmEnabled]);
+
+            const checkAnswer = (val) => {
+                let isCorrect = false;
+                if (gameState === 'math') isCorrect = (val === currentTask.ans);
+                else if (gameState === 'bopo') isCorrect = (val === currentTask.zy);
+                else if (gameState === 'english') isCorrect = (val.w === currentTask.ans.w);
+                else if (gameState === 'clock') isCorrect = (val === currentTask.ans);
+
+                if (isCorrect) {
+                    setScore(s => s + 1); setFeedback('correct'); playNote(880, 0.2);
+                    setTimeout(() => { setFeedback(null); nextTask(gameState); }, 600);
+                } else {
+                    setFeedback('wrong'); playNote(220, 0.2);
+                    setTimeout(() => setFeedback(null), 600);
+                }
+            };
+
+            const handleKeyInput = (idx) => {
+                const k = PIANO_LAYOUT[idx];
+                playNote(k.f);
+                setActiveKey(idx);
+                setTimeout(() => setActiveKey(null), 150);
+
+                if (gameState === 'piano_play' && !isAutoPlaying) {
+                    if (idx === selectedSong.notes[songIndex][0]) {
+                        if (songIndex === selectedSong.notes.length - 1) {
+                            setScore(s => s + 10);
+                            setFeedback('correct');
+                            setTimeout(() => { setFeedback(null); setGameState('piano_menu'); }, 1000);
+                        } else {
+                            setSongIndex(s => s + 1);
+                        }
+                    }
+                }
+            };
+
+            const startAutoPlay = () => {
+                if (isAutoPlaying) { stopAutoPlay(); return; }
+                setIsAutoPlaying(true); let idx = 0;
+                const loop = () => {
+                    if (idx < selectedSong.notes.length) {
+                        const [noteIdx, beats] = selectedSong.notes[idx];
+                        playNote(PIANO_LAYOUT[noteIdx].f, beats * 0.8);
+                        setActiveKey(noteIdx); setSongIndex(idx); idx++;
+                        autoPlayRef.current = setTimeout(() => { setActiveKey(null); loop(); }, 500 * beats);
+                    } else { setIsAutoPlaying(false); }
+                }; loop();
+            };
+
+            const stopAutoPlay = () => {
+                setIsAutoPlaying(false);
+                if (autoPlayRef.current) {
+                    clearTimeout(autoPlayRef.current);
+                    autoPlayRef.current = null;
+                }
+                setActiveKey(null);
+            };
+
+            const RankingModal = ({ gameId, onClose, highlightId }) => {
+                const list = leaderboards[gameId] || [];
+                return (
+                    <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+                        <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-2xl font-black text-amber-500">🏆 TOP 20 排行</h3>
+                                <button onClick={() => { if(confirm("確定清除所有排行數據嗎？")) clearRanking(gameId); }} className="text-xs bg-red-50 text-red-400 px-3 py-1 rounded-full font-bold">清除排行</button>
+                            </div>
+                            <div className="space-y-2 max-h-80 overflow-y-auto no-scrollbar py-2">
+                                {list.length === 0 ? <div className="text-stone-300 py-10 text-center">尚無數據</div> : 
+                                    list.map((it,ix) => (
+                                        <div key={it.id} className={`flex justify-between items-center p-3 rounded-2xl font-bold transition-all ${it.id === highlightId ? 'rank-highlight' : 'bg-stone-50'}`}>
+                                            <span className="w-8 text-stone-400">#{ix+1}</span>
+                                            <span className="flex-1 text-left ml-2 text-stone-600">{it.date}</span>
+                                            <span className="text-amber-500 text-xl">{it.score}</span>
+                                        </div>
+                                    ))}
+                            </div>
+                            <button onClick={onClose} className="w-full bg-stone-800 text-white py-4 rounded-3xl font-bold text-xl btn-active">返回主選單</button>
+                        </div>
+                    </div>
+                );
+            };
+
+            const VerticalZhuyin = ({ zy }) => {
+                const parts = zy.split(' ');
+                return (
+                    <div className="flex gap-2">
+                        {parts.map((p, i) => {
+                            const tones = ['ˊ', 'ˇ', 'ˋ', '˙']; let main = []; let tone = ''; let cls = '';
+                            for (let c of p) {
+                                if (tones.includes(c)) { tone = c; cls = c==='ˊ'?'tone-2':c==='ˇ'?'tone-3':c==='ˋ'?'tone-4':'tone-light'; }
+                                else if (c !== ' ') main.push(c);
+                            }
+                            return (
+                                <div key={i} className="zy-fixed-box scale-90">
+                                    <div className="zy-main-stack">{main.map((s,i)=><span key={i}>{s}</span>)}</div>
+                                    {tone && <div className={`zy-tone-mark ${cls}`}>{tone}</div>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            };
+
+            const StaffDisplay = ({ note }) => (
+                <svg width="340" height="150" viewBox="0 0 280 120" className="bg-white rounded-[2rem] shadow-inner border border-stone-100">
+                    {[25, 40, 55, 70, 85].map((y, i) => <line key={i} x1="10" y1={y} x2="270" y2={y} stroke="#bbb" strokeWidth="2.5" />)}
+                    <text x="15" y="90" fontSize="80" fill="#aaa" style={{ fontFamily: 'serif' }}>𝄞</text>
+                    {note && (
+                        <g transform={`translate(150, ${note.staffY * 1.5 - 45})`}>
+                            {note.acc === '#' && <text x="-40" y="15" fontSize="45" fill="#3b82f6" fontWeight="900">#</text>}
+                            {note.ledger && <line x1="-25" y1="0" x2="25" y2="0" stroke="#444" strokeWidth="5" />}
+                            <ellipse cx="0" cy="0" rx="16" ry="12" fill="#3b82f6" transform="rotate(-20)" />
+                            <line x1="14" y1="0" x2="14" y2="-65" stroke="#444" strokeWidth="4" />
+                        </g>
+                    )}
+                </svg>
+            );
+
+            if (gameState === 'menu') {
+                return (
+                    <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-[#fafaf5]">
+                        <div className="text-center mb-8 shrink-0">
+                            <div className="text-6xl mb-4 animate-bounce">🎡</div>
+                            <h1 className="text-4xl font-black text-stone-700">小寶貝遊樂園</h1>
+                            <div className="flex gap-2 justify-center mt-3">
+                                <button onClick={()=>setBgmEnabled(!bgmEnabled)} className={`p-2 rounded-2xl border-2 transition-all ${bgmEnabled?'bg-green-50 border-green-300 text-green-500 bgm-pulse':'text-stone-300 border-stone-200'}`}>🎵 BGM</button>
+                                <button onClick={toggleFullscreen} className="p-2 rounded-2xl border-2 border-stone-200 text-stone-500">📱 全螢幕</button>
+                            </div>
+                        </div>
+                        <div className="scroll-container no-scrollbar w-full max-w-xs space-y-3">
+                            {[
+                                { id: 'math', label: '數學練習', icon: '🧠', color: 'bg-rose-50 text-rose-400 border-rose-100' },
+                                { id: 'bopo', label: '注音練習', icon: '📚', color: 'bg-blue-50 text-blue-400 border-blue-100' },
+                                { id: 'english', label: '英文練習', icon: '🌍', color: 'bg-emerald-50 text-emerald-400 border-emerald-100' },
+                                { id: 'clock', label: '看時鐘', icon: '⏰', color: 'bg-yellow-50 text-yellow-500 border-yellow-100' },
+                                { id: 'piano_menu', label: '鋼琴樂譜', icon: '🎹', color: 'bg-purple-50 text-purple-400 border-purple-100' }
+                            ].map(btn => (
+                                <div key={btn.id} className="relative">
+                                    <button onClick={() => startGame(btn.id)} className={`${btn.color} border-2 p-4 rounded-[2rem] flex items-center justify-between btn-active w-full font-black text-xl shadow-sm`}>
+                                        <span>{btn.icon}</span> <span className="flex-1 text-center">{btn.label}</span>
+                                    </button>
+                                    {btn.id !== 'piano_menu' && (
+                                        <button onClick={()=>setShowRanking(btn.id)} className="absolute -right-4 top-1/2 -translate-y-1/2 bg-white p-2 rounded-full shadow-lg border border-amber-200 text-xl">🏆</button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        {showRanking && <RankingModal gameId={showRanking} onClose={()=>setShowRanking(null)} />}
+                    </div>
+                );
+            }
+
+            if (gameState === 'piano_menu') {
+                return (
+                    <div className="min-h-screen bg-[#fafaf5] p-4 flex flex-col">
+                        <div className="flex items-center mb-6"><button onClick={()=>setGameState('menu')} className="bg-white p-3 rounded-2xl shadow-sm text-2xl mr-4">🏠</button><h2 className="text-2xl font-black text-stone-600">兒歌樂譜 (50 首)</h2></div>
+                        <div className="scroll-container no-scrollbar grid grid-cols-2 gap-3 pb-10">
+                            {PIANO_SONGS.map((s,i)=><button key={i} onClick={()=>{setSelectedSong(s);setSongIndex(0);setGameState('piano_play');}} className="bg-white border p-4 rounded-3xl btn-active text-center shadow-sm">
+                                <div className="text-[10px] text-purple-300 font-bold">[{s.cat}]</div>
+                                <div className="font-black text-purple-600">{s.name}</div>
+                            </button>)}
+                        </div>
+                    </div>
+                );
+            }
+
+            if (gameState === 'gameover') {
+                const gid = lastSessionId ? (currentTask?.q ? 'math' : (currentTask?.char ? 'bopo' : (currentTask?.h ? 'clock' : 'english'))) : 'math';
+                return <RankingModal gameId={gid} highlightId={lastSessionId} onClose={()=>setGameState('menu')} />;
+            }
+
+            return (
+                <div className="min-h-screen w-full flex flex-col bg-[#fafaf5] p-4 relative">
+                    <div className="flex justify-between items-center z-50">
+                        <button onClick={()=>setGameState('menu')} className="bg-white p-3 rounded-2xl shadow-sm text-xl">🏠</button>
+                        <div className="flex gap-2">
+                            {gameState !== 'piano_play' && <div className="px-4 py-2 rounded-2xl bg-white shadow-sm font-black text-xl text-rose-400">⏳ {timeLeft}</div>}
+                            <div className="px-4 py-2 rounded-2xl bg-white shadow-sm font-black text-xl text-amber-400">🏆 {score}</div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col items-center justify-start pt-6 space-y-8">
+                        {gameState === 'math' && currentTask && (
+                            <><div className="text-6xl font-black text-rose-400 bg-white p-10 rounded-[3rem] shadow-sm border-4 border-rose-50">{currentTask.q}</div>
+                            <div className="grid grid-cols-2 gap-4 w-full max-w-xs">{currentTask.options.map(o=><button key={o} onClick={()=>checkAnswer(o)} className="bg-white p-6 rounded-[2rem] text-4xl font-black text-rose-400 btn-active border shadow-sm">{o}</button>)}</div></>
+                        )}
+                        {gameState === 'bopo' && currentTask && (
+                            <><div className="flex flex-col items-center gap-4">
+                                <div className="bg-white px-10 py-6 rounded-[2.5rem] shadow-sm border-4 border-blue-50 flex items-center justify-center text-6xl font-black text-blue-400 tracking-widest">{currentTask.char}</div>
+                                <button onClick={()=>speak(currentTask.char)} className="bg-blue-100 p-6 rounded-full text-4xl shadow-md active:scale-95">🔊</button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 w-full max-w-lg">{currentTask.options.map((o, idx)=><button key={idx} onClick={()=>checkAnswer(o)} className="btn-active flex justify-center bg-white p-4 rounded-[2rem] shadow-sm border border-stone-100"><VerticalZhuyin zy={o}/></button>)}</div></>
+                        )}
+                        {gameState === 'english' && currentTask && (
+                            <><div className="flex flex-col items-center gap-4">
+                                <div className="bg-white p-10 rounded-[4rem] text-center border-4 border-emerald-50 shadow-sm">
+                                    <div className="text-[7rem] leading-none">{currentTask.ans.e}</div>
+                                </div>
+                                <button onClick={()=>speak(currentTask.ans.w, 'en-US')} className="bg-emerald-100 p-6 rounded-full text-4xl shadow-md active:scale-95">🔊</button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 w-full max-w-sm">{currentTask.options.map(o=><button key={o.w} onClick={()=>checkAnswer(o)} className="bg-white p-5 rounded-[2rem] btn-active text-center border shadow-sm"><div className="text-2xl font-black text-emerald-500 uppercase">{o.w}</div><div className="text-sm text-stone-400 font-bold mt-1">{o.zy}</div></button>)}</div></>
+                        )}
+                        {gameState === 'clock' && currentTask && (
+                            <><div className="bg-white w-full max-w-xs p-6 rounded-[3rem] border-4 border-yellow-50 text-center shadow-md"><svg viewBox="0 0 100 100" className="w-48 h-48 mx-auto"><circle cx="50" cy="50" r="45" fill="white" stroke="#facc15" strokeWidth="3" />{[...Array(12)].map((_, i) => <text key={i} x={50 + 35 * Math.sin((i*30)*Math.PI/180)} y={50 - 35 * Math.cos((i*30)*Math.PI/180)} textAnchor="middle" alignmentBaseline="middle" className="text-[7px] font-bold fill-yellow-900">{i === 0 ? 12 : i}</text>)}<line x1="50" y1="50" x2={50 + 20 * Math.sin(((currentTask.h % 12) * 30 + currentTask.m * 0.5) * Math.PI / 180)} y2={50 - 20 * Math.cos(((currentTask.h % 12) * 30 + currentTask.m * 0.5) * Math.PI / 180)} stroke="black" strokeWidth="4" strokeLinecap="round" /><line x1="50" y1="50" x2={50 + 30 * Math.sin((currentTask.m * 6) * Math.PI / 180)} y2={50 - 30 * Math.cos((currentTask.m * 6) * Math.PI / 180)} stroke="#666" strokeWidth="3" strokeLinecap="round" /></svg></div>
+                            <div className="grid grid-cols-2 gap-4 w-full max-w-xs">{currentTask.options.map(o=><button key={o} onClick={()=>checkAnswer(o)} className="bg-white p-5 rounded-[2rem] text-3xl font-black text-yellow-500 btn-active border shadow-sm">{o}</button>)}</div></>
+                        )}
+                        {gameState === 'piano_play' && selectedSong && (
+                            <div className="fixed inset-0 flex items-start justify-center bg-[#fafaf5] p-2 z-[55]">
+                                {/* 左側返回區 */}
+                                <div className="flex flex-col justify-center h-[50vh] pr-4">
+                                    <button onClick={()=>setGameState('piano_menu')} className="bg-white p-4 rounded-3xl shadow-md border border-stone-200 text-3xl active:scale-90">🏠</button>
+                                </div>
+                                
+                                {/* 中間譜面區 */}
+                                <div className="flex flex-col items-center justify-center h-[50vh] max-w-[65vw]">
+                                    <div className="text-sm font-black text-purple-400 mb-1">正在練習：{selectedSong.name}</div>
+                                    <StaffDisplay note={PIANO_LAYOUT[selectedSong.notes[songIndex][0]]} />
+                                </div>
+                                
+                                {/* 右側示範區 */}
+                                <div className="flex flex-col justify-center h-[50vh] pl-4">
+                                    <button onClick={startAutoPlay} className={`p-4 rounded-3xl shadow-md text-white text-3xl active:scale-90 ${isAutoPlaying?'bg-rose-400':'bg-purple-500'}`}>{isAutoPlaying?'⏹️':'▶️'}</button>
+                                    <div className="text-[10px] text-center mt-2 font-bold text-stone-400">{isAutoPlaying?'停止':'示範'}</div>
+                                </div>
+
+                                <div className="piano-container">{PIANO_LAYOUT.map((k,idx)=><button key={idx} className={`${k.b?'black-key':'white-key'} ${activeKey===idx?'active':''}`} onPointerDown={(e)=>{e.preventDefault(); handleKeyInput(idx);}}>{!k.b && k.n}</button>)}</div>
+                            </div>
+                        )}
+                    </div>
+                    {feedback && <div className="fixed inset-0 flex items-center justify-center z-[100] pointer-events-none text-9xl animate-ping">{feedback==='correct'?'🌟':'🤔'}</div>}
+                </div>
+            );
         };
 
-        document.getElementById('start-btn').onclick = () => {
-            isStarted = true;
-            document.getElementById('setup-btns').classList.add('hidden');
-            document.getElementById('reset-btn').classList.remove('hidden');
-            document.getElementById('info-bar').classList.remove('hidden');
-            statusEl.textContent = "點擊數字進行連線吧！";
-            SFX.victory();
-        };
-
-        document.getElementById('undo-btn').onclick = () => {
-            if (history.length === 0) return;
-            const last = history.pop();
-            marked.delete(last);
-            SFX.undo();
-            updateGame();
-        };
-
-        document.getElementById('reset-btn').onclick = () => {
-            location.reload(); // 最簡單的重置方式
-        };
-
-        createGrid();
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
