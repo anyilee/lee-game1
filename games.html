@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>繽紛連線 Bingo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+    <style>
+        body { background-color: #fffafb; font-family: 'Helvetica Neue', Arial, sans-serif; }
+        .cute-font { font-family: 'ZCOOL KuaiLe', cursive, sans-serif; }
+        
+        /* 棋盤與格子 */
+        .bingo-container { position: relative; }
+        .bingo-cell {
+            aspect-ratio: 1 / 1;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 10;
+        }
+        .marked {
+            background-color: #ff8fa3 !important;
+            color: white !important;
+            transform: scale(0.9);
+            border-color: #ffb3c1 !important;
+            box-shadow: 0 4px 10px rgba(255, 143, 163, 0.3);
+        }
+
+        /* 連線線條 */
+        #line-svg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 20;
+        }
+        .bingo-line {
+            stroke: #ff4d6d;
+            stroke-width: 8;
+            stroke-linecap: round;
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: drawLine 0.5s ease-out forwards;
+            filter: drop-shadow(0 0 5px rgba(255, 77, 109, 0.5));
+            opacity: 0.8;
+        }
+        @keyframes drawLine { to { stroke-dashoffset: 0; } }
+
+        /* 按鈕樣式 */
+        .btn-main {
+            background: linear-gradient(135deg, #ff8fa3 0%, #ff4d6d 100%);
+            box-shadow: 0 4px 0 #c9184a;
+            transition: all 0.1s;
+        }
+        .btn-main:active { transform: translateY(2px); box-shadow: 0 2px 0 #c9184a; }
+        .btn-sub {
+            background: linear-gradient(135deg, #bde0fe 0%, #a2d2ff 100%);
+            box-shadow: 0 4px 0 #4895ef;
+        }
+        .btn-sub:active { transform: translateY(2px); box-shadow: 0 2px 0 #4895ef; }
+
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .float { animation: float 3s ease-in-out infinite; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div id="app" class="w-full max-w-md">
+        <header class="text-center mb-6">
+            <h1 class="text-5xl font-bold text-pink-500 cute-font float drop-shadow-md">Bingo!</h1>
+            <p id="status-text" class="text-pink-400 mt-2 font-medium">✨ 準備好開始好運的一天了嗎？ ✨</p>
+        </header>
+
+        <!-- 頂部資訊列 -->
+        <div id="info-bar" class="hidden flex justify-between items-center mb-4 bg-white p-4 rounded-3xl border-4 border-pink-100 shadow-sm">
+            <div class="text-pink-600 font-bold flex items-center gap-2">
+                <span class="text-sm">連線數</span>
+                <span id="line-count" class="text-4xl text-pink-500">0</span>
+            </div>
+            <button id="undo-btn" class="bg-pink-50 hover:bg-pink-100 text-pink-500 px-4 py-2 rounded-2xl font-bold transition-all flex items-center gap-2">
+                <span>↩</span> 上一步
+            </button>
+        </div>
+
+        <!-- 棋盤主體 -->
+        <div class="bingo-container bg-white rounded-[2rem] border-[10px] border-pink-100 shadow-2xl overflow-hidden mb-6">
+            <div id="grid" class="grid grid-cols-5 gap-1 p-2">
+                <!-- 由 JS 生成 25 格 -->
+            </div>
+            <!-- 連線 SVG 層 -->
+            <svg id="line-svg" viewBox="0 0 500 500"></svg>
+        </div>
+
+        <!-- 按鈕群組 -->
+        <div class="space-y-4">
+            <div id="setup-btns" class="flex gap-4">
+                <button id="random-btn" class="btn-sub flex-1 text-white font-black py-4 rounded-2xl text-lg">🎲 隨機填數</button>
+                <button id="start-btn" class="btn-main flex-1 text-white font-black py-4 rounded-2xl text-lg opacity-50 cursor-not-allowed" disabled>💖 開始遊戲</button>
+            </div>
+            <button id="reset-btn" class="hidden w-full bg-white border-4 border-pink-100 text-pink-400 font-black py-3 rounded-2xl hover:bg-pink-50 transition-all">🔄 重新開始</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 音效系統 ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(freq, type, dur, vol) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + dur);
+        }
+
+        const SFX = {
+            click: () => { playTone(600, 'sine', 0.1, 0.2); setTimeout(() => playTone(900, 'sine', 0.1, 0.1), 50); },
+            undo: () => playTone(300, 'sine', 0.2, 0.2),
+            winLine: () => playTone(880, 'triangle', 0.3, 0.1),
+            victory: () => {
+                [523, 659, 783, 1046].forEach((f, i) => setTimeout(() => playTone(f, 'square', 0.4, 0.05), i * 150));
+            }
+        };
+
+        // --- 遊戲邏輯 ---
+        let gridData = Array(25).fill(null);
+        let marked = new Set();
+        let history = [];
+        let isStarted = false;
+        let completedLines = []; // 存儲已完成連線的識別碼
+
+        const gridEl = document.getElementById('grid');
+        const svgEl = document.getElementById('line-svg');
+        const statusEl = document.getElementById('status-text');
+        const lineCountEl = document.getElementById('line-count');
+
+        // 生成格子
+        function createGrid() {
+            gridEl.innerHTML = '';
+            for (let i = 0; i < 25; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'bingo-cell bg-pink-50 rounded-2xl flex items-center justify-center text-2xl font-black text-pink-200 cursor-pointer';
+                cell.textContent = gridData[i] || '?';
+                cell.onclick = () => handleCellClick(i);
+                gridEl.appendChild(cell);
+            }
+        }
+
+        function handleCellClick(i) {
+            if (!isStarted) return;
+            if (marked.has(i)) {
+                marked.delete(i);
+                history = history.filter(idx => idx !== i);
+                SFX.undo();
+            } else {
+                marked.add(i);
+                history.push(i);
+                SFX.click();
+            }
+            updateGame();
+        }
+
+        function updateGame() {
+            // 更新格子視覺
+            const cells = document.querySelectorAll('.bingo-cell');
+            cells.forEach((cell, i) => {
+                if (marked.has(i)) cell.classList.add('marked');
+                else cell.classList.remove('marked');
+            });
+
+            // 檢查連線
+            const currentLines = checkLines();
+            
+            // 如果連線數增加了，播音效
+            if (currentLines.length > completedLines.length) SFX.winLine();
+            
+            completedLines = currentLines;
+            lineCountEl.textContent = completedLines.length;
+            drawLines(completedLines);
+
+            if (completedLines.length >= 5) {
+                statusEl.textContent = "🏆 恭喜！達成五條連線了！ 🏆";
+                triggerVictory();
+            } else {
+                statusEl.textContent = isStarted ? "點擊數字進行連線吧！" : statusEl.textContent;
+            }
+        }
+
+        function checkLines() {
+            const lines = [];
+            const size = 5;
+
+            // 橫線
+            for (let r = 0; r < size; r++) {
+                let row = [];
+                for (let c = 0; c < size; c++) row.push(r * size + c);
+                if (row.every(idx => marked.has(idx))) lines.push({ type: 'h', idx: r });
+            }
+            // 直線
+            for (let c = 0; c < size; c++) {
+                let col = [];
+                for (let r = 0; r < size; r++) col.push(r * size + c);
+                if (col.every(idx => marked.has(idx))) lines.push({ type: 'v', idx: c });
+            }
+            // 斜線
+            let d1 = [0, 6, 12, 18, 24];
+            if (d1.every(idx => marked.has(idx))) lines.push({ type: 'd1' });
+            let d2 = [4, 8, 12, 16, 20];
+            if (d2.every(idx => marked.has(idx))) lines.push({ type: 'd2' });
+
+            return lines;
+        }
+
+        function drawLines(lines) {
+            svgEl.innerHTML = '';
+            const step = 100; // 500 / 5
+            const offset = 50; // step / 2
+
+            lines.forEach(line => {
+                const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                l.setAttribute("class", "bingo-line");
+                
+                if (line.type === 'h') {
+                    const y = line.idx * step + offset;
+                    l.setAttribute("x1", 20); l.setAttribute("y1", y);
+                    l.setAttribute("x2", 480); l.setAttribute("y2", y);
+                } else if (line.type === 'v') {
+                    const x = line.idx * step + offset;
+                    l.setAttribute("x1", x); l.setAttribute("y1", 20);
+                    l.setAttribute("x2", x); l.setAttribute("y2", 480);
+                } else if (line.type === 'd1') {
+                    l.setAttribute("x1", 20); l.setAttribute("y1", 20);
+                    l.setAttribute("x2", 480); l.setAttribute("y2", 480);
+                } else if (line.type === 'd2') {
+                    l.setAttribute("x1", 480); l.setAttribute("y1", 20);
+                    l.setAttribute("x2", 20); l.setAttribute("y2", 480);
+                }
+                svgEl.appendChild(l);
+            });
+        }
+
+        function triggerVictory() {
+            SFX.victory();
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#ff8fa3', '#ff4d6d', '#ffb3c1', '#ffffff'] });
+        }
+
+        // --- 按鈕事件 ---
+        document.getElementById('random-btn').onclick = () => {
+            gridData = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+            SFX.click();
+            createGrid();
+            const cells = document.querySelectorAll('.bingo-cell');
+            cells.forEach(c => { c.classList.remove('text-pink-200'); c.classList.add('text-pink-500'); });
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('start-btn').classList.remove('opacity-50', 'cursor-not-allowed');
+            statusEl.textContent = "數字填好了，準備好就開始！";
+        };
+
+        document.getElementById('start-btn').onclick = () => {
+            isStarted = true;
+            document.getElementById('setup-btns').classList.add('hidden');
+            document.getElementById('reset-btn').classList.remove('hidden');
+            document.getElementById('info-bar').classList.remove('hidden');
+            statusEl.textContent = "點擊數字進行連線吧！";
+            SFX.victory();
+        };
+
+        document.getElementById('undo-btn').onclick = () => {
+            if (history.length === 0) return;
+            const last = history.pop();
+            marked.delete(last);
+            SFX.undo();
+            updateGame();
+        };
+
+        document.getElementById('reset-btn').onclick = () => {
+            location.reload(); // 最簡單的重置方式
+        };
+
+        createGrid();
+    </script>
+</body>
+</html>
+
